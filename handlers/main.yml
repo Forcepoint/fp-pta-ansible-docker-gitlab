@@ -1,0 +1,6 @@
+---
+# handlers file for docker-gitlab
+
+- name: restart nginx
+  become: yes
+  command: docker restart nginx

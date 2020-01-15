@@ -1,0 +1,156 @@
+---
+# tasks file for docker-gitlab
+
+# Gitlab needs to have port 22 available so it can allow cloning of git repos through SSH.
+# This is problematic when running gitlab in a docker container because the docker host
+# natively uses port 22 for ssh communication itself. NGINX doesn't redirect port 22 traffic,
+# so the cleanest solution is to change the SSH port of the docker host and allow the container
+# to get the 22 traffic directly, as detailed here: https://github.com/sameersbn/docker-gitlab/issues/38
+
+# Changing the host's SSH port affects ansible as well. A solution was needed to allow easy
+# SSH communication with the host without having to switch the config back and forth from port 22
+# to the custom SSH port whenever the VM was reprovisioned.
+
+- name: create the main data directory
+  become: yes
+  file:
+    path: "{{ docker_gitlab_root_data_dir }}/gitlab"
+    state: directory
+    mode: 0775
+    owner: root
+    group: root
+
+- name: create the config data directory
+  become: yes
+  file:
+    path: "{{ docker_gitlab_root_data_dir }}/gitlab/config"
+    state: directory
+    mode: 0775
+    owner: root
+    group: root
+
+- name: create the logs data directory
+  become: yes
+  file:
+    path: "{{ docker_gitlab_root_data_dir }}/gitlab/logs"
+    state: directory
+    mode: 0755
+    owner: polkitd
+    group: root
+
+- name: create the data data directory
+  become: yes
+  file:
+    path: "{{ docker_gitlab_root_data_dir }}/gitlab/data"
+    state: directory
+    mode: 0755
+    owner: root
+    group: root
+
+- name: create the backups/ssl data directories
+  become: yes
+  file:
+    path: "{{ docker_gitlab_root_data_dir }}/gitlab/{{ item }}"
+    state: directory
+    mode: 0770
+    owner: root
+    group: root
+    recurse: yes
+  with_items:
+    - backups
+    - ssl
+
+- name: create the trusted-certs data directory
+  become: yes
+  file:
+    path: "{{ docker_gitlab_root_data_dir }}/gitlab/trusted-certs"
+    state: directory
+    mode: 0755
+    owner: root
+    group: root
+
+- name: copy custom certificates to trust
+  become: yes
+  copy:
+    src: "{{ item.path }}"
+    dest: "{{ docker_gitlab_root_data_dir }}/gitlab/trusted-certs/"
+    remote_src: {{ item.remote_src }}
+    mode: 0744
+    owner: root
+    group: root
+  loop: "{{ docker_gitlab_certs_to_trust }}"
+  when: docker_gitlab_certs_to_trust is defined
+
+- name: copy the key
+  become: yes
+  copy:
+    src: "files/{{ docker_gitlab_dns }}.key"
+    dest: "{{ docker_gitlab_root_data_dir }}/gitlab/ssl/{{ docker_gitlab_dns }}.key"
+
+- name: own the key
+  become: yes
+  file:
+    path: "{{ docker_gitlab_root_data_dir }}/gitlab/ssl/{{ docker_gitlab_dns }}.key"
+    state: file
+    owner: root
+    group: root
+    mode: 0400
+
+- name: copy the pem
+  become: yes
+  copy:
+    src: "files/{{ docker_gitlab_dns }}.pem"
+    dest: "{{ docker_gitlab_root_data_dir }}/gitlab/ssl/{{ docker_gitlab_dns }}.pem"
+
+- name: own the pem
+  become: yes
+  file:
+    path: "{{ docker_gitlab_root_data_dir }}/gitlab/ssl/{{ docker_gitlab_dns }}.pem"
+    state: file
+    owner: root
+    group: root
+    mode: 0400
+
+- name: pull the gitlab-ce docker image
+  become: true
+  docker_image:
+    # https://hub.docker.com/r/gitlab/gitlab-ce/
+    name: gitlab/gitlab-ce:{{ docker_gitlab_version }}-ce.0
+    source: pull
+
+- name: bring up docker
+  become: true
+  docker_compose:
+    project_name: gitlab
+    definition:
+      version: '2'
+      services:
+        gitlab:
+          image: gitlab/gitlab-ce:{{ docker_gitlab_version }}-ce.0
+          restart: always
+          hostname: '{{ docker_gitlab_dns }}'
+          container_name: gitlab
+          environment:
+            GITLAB_OMNIBUS_CONFIG: "{{ docker_gitlab_omnibus_config }}"
+            GITLAB_EMAIL_FROM: 'no-reply@forcepoint.com'
+            GITLAB_EMAIL_DISPLAY_NAME: '{{ docker_gitlab_display_name }}'
+            GITLAB_EMAIL_SUBJECT_SUFFIX: '[{{ docker_gitlab_display_name }}]'
+            GITLAB_EMAIL_REPLY_TO: 'no-reply@forcepoint.com'
+          ports:
+           - 80:80
+           - 443:443
+           - 22:22
+          # This is needed to allow the port 22 communication to go to the container.
+          network_mode: "host"
+          volumes:
+           - '{{ docker_gitlab_root_data_dir }}/gitlab/config:/etc/gitlab'
+           - '{{ docker_gitlab_root_data_dir }}/gitlab/logs:/var/log/gitlab'
+           - '{{ docker_gitlab_root_data_dir }}/gitlab/data:/var/opt/gitlab'
+           - '{{ docker_gitlab_root_data_dir }}/gitlab/ssl:/etc/gitlab/ssl'
+           - '{{ docker_gitlab_root_data_dir }}/gitlab/trusted-certs:/etc/gitlab/trusted-certs'
+           - '{{ docker_gitlab_root_data_dir }}/gitlab/backups:/var/opt/gitlab/backups'
+  register: docker_compose_output
+
+- assert:
+    that:
+      - "docker_compose_output.ansible_facts.gitlab.gitlab.state.running"

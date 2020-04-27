@@ -42,6 +42,7 @@ Ensure they're vaulted before committing them to source control.
 
 ### REQUIRED
 
+* docker_gitlab_version: The version of Gitlab to use.
 * docker_gitlab_display_name: The name to be displayed in emails (EX: SLC Gitlab).
 * docker_gitlab_dns: The DNS name of the intended Gitlab instance.
 * docker_gitlab_omnibus_config: The omnibus config to load Gitlab with. 
@@ -73,6 +74,7 @@ None
 
     - hosts: servers
       vars:
+        docker_gitlab_version: 12.10.1
         docker_gitlab_display_name: "COMPANY Gitlab"
         docker_gitlab_dns: gitlab.COMPANY.com
         docker_gitlab_ldap_password: 'encrypted string of ansible vaulted password'

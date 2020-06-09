@@ -2,6 +2,8 @@
 
 Setup an HTTPS enabled gitlab server in a docker container.
 
+For information about PTA and how to use it with this Ansible role please visit https://github.com/Forcepoint/fp-pta-overview/blob/master/README.md
+
 ## Disaster Recovery
 
 If you have utilized the backup-local role to make backups, follow these steps to recover from backups of the data...

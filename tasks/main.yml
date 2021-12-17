@@ -140,8 +140,6 @@
            - 80:80
            - 443:443
            - 22:22
-          # This is needed to allow the port 22 communication to go to the container.
-          network_mode: "host"
           volumes:
            - '{{ docker_gitlab_root_data_dir }}/gitlab/config:/etc/gitlab'
            - '{{ docker_gitlab_root_data_dir }}/gitlab/logs:/var/log/gitlab'
